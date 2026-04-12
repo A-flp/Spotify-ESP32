@@ -7,9 +7,9 @@
 // ════════════════════════════════════════════════════════
 //  KONFIGURASI
 // ════════════════════════════════════════════════════════
-const char* WIFI_SSID = "22194 (HUAWEI)";
-const char* WIFI_PASS = "ABLHJJO7rR";
-const char* SERVER_URL = "http://192.168.3.7:3000/now-playing";
+const char* WIFI_SSID = "Nama Wifi"; 
+const char* WIFI_PASS = "Password Wifi";
+const char* SERVER_URL = "http://<IP_ADDRESS>:3000/now-playing";
 
 // ════════════════════════════════════════════════════════
 //  HARDWARE

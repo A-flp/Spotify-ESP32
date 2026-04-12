@@ -10,8 +10,8 @@ from aiohttp import web
 # ════════════════════════════════════════════════════════
 #  KONFIGURASI
 # ════════════════════════════════════════════════════════
-BOT_TOKEN   = "MTQ5Mjc1NDI3Njc4NTcyMTU0NA.GDt6ri.piXoYGkVv1YXpZ7MSELjFC-onWFkid8gukYju0"
-USER_ID     = 713597471414026240        # ganti dengan Discord user ID kamu
+BOT_TOKEN   = ""
+USER_ID     = ""        # ganti dengan Discord user ID kamu
 PORT        = 3000
 LYRIC_LEAD  = 2.4              
 
