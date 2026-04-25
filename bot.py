@@ -9,10 +9,12 @@ import asyncio
 import time
 import json
 import re
-import urllib.request
+import logging
 import urllib.parse
-from aiohttp import web
-import os
+
+from aiohttp import web, ClientSession
+from dataclasses import dataclass, field
+from typing import List, Dict
 
 load_dotenv()
 
@@ -23,6 +25,9 @@ BOT_TOKEN   = os.load_dotenv("BOT_TOKEN")
 USER_ID     = os.load_dotenv("USER_ID")
 PORT        = int(os.load_dotenv("PORT"))
 LYRIC_LEAD  = float(os.load_dotenv("LYRIC_LEAD"))
+
+WATCHDOG_INTERVAL = 2
+CACHE_LIMIT = 100
 
 # ════════════════════════════════════════════════════════
 #  STATE
