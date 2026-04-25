@@ -1,415 +1,201 @@
-# 🎵 Spotify OLED Display — ESP32 + Discord Bot
+#  Spotify OLED Display - ESP32 + Discord Bot
 
-Proyek ini menampilkan lagu Spotify yang sedang kamu putar **secara real-time** di layar OLED 1.3" (SH1106 128×64), lengkap dengan **lirik sinkron**, animasi mata idle, progress bar, dan equalizer animasi.
+This project provides a real-time display of your currently playing Spotify track on an ESP32 connected to a 1.3" OLED screen (SH1106 128x64). It features synced lyrics, idle eye animations, a progress bar, and an animated equalizer, all powered by a Discord bot.
 
----
+_This version has been modified by A-flp for personal use and learning, with significant parts rewritten in English._
 
-## 🗂️ Struktur Proyek
+##  Key Features & Benefits
 
-```
-├── bot.py          # Discord bot + HTTP server (dijalankan di VPS/PC)
-├── esp32.ino       # Firmware Arduino untuk ESP32
-└── README.md
-```
+*   **Real-time Spotify Track Display**: See what's playing instantly, including artist and song title.
+*   **Synced Lyrics**: Enjoy lyrics displayed in sync with the music, enhancing the listening experience.
+*   **Dynamic Visual Enhancements**:
+    *   **Idle Eye Animations**: Engaging and playful animations when no music is playing.
+    *   **Progress Bar**: Visual feedback on the current track's progression.
+    *   **Animated Equalizer**: Dynamic visualizer that responds to music (simulated or actual, based on implementation).
+*   **Cross-platform Integration**: Leverages Discord's Rich Presence for Spotify data, making it easy to use across different devices where Discord is active.
+*   **Standalone Display**: Once configured, the ESP32 unit works independently to fetch and display music information.
 
----
+##  Prerequisites & Dependencies
 
-## 🧠 Cara Kerja
+To set up and run this project, you will need:
 
-```
-Spotify ──► Discord (Rich Presence) ──► Discord Bot (Python)
-                                              │
-                                    Ambil lirik dari lrclib.net
-                                              │
-                                    Serve via HTTP :3000
-                                              │
-                                         ESP32 polling
-                                              │
-                                     Tampil di OLED SH1106
-```
+### Hardware
+*   **ESP32 Development Board**: Any ESP32 board (e.g., ESP32-WROOM-32).
+*   **OLED Display**: 1.3" SH1106 128x64 OLED display (I2C communication).
+*   **Jumper Wires & Breadboard**: For connecting components.
 
-1. Kamu main Spotify → Discord otomatis detect aktivitas
-2. Bot Discord (`bot.py`) baca data lagu dari Discord presence
-3. Bot fetch lirik dari [lrclib.net](https://lrclib.net) (gratis, no API key)
-4. ESP32 polling endpoint `/now-playing` setiap 2 detik
-5. OLED tampilkan judul, artist, lirik sinkron, dan progress bar
+### Software
+*   **Python 3.x**: For the Discord bot (`bot.py`).
+*   **Arduino IDE**: For flashing the ESP32 firmware (`esp32.ino`).
+    *   **ESP32 Board Package**: Install via Arduino Boards Manager.
+    *   **Required Arduino Libraries**:
+        *   `Adafruit GFX Library`
+        *   `Adafruit SH1106 Library` (or a compatible SH1106 library like `U8g2` for SH1106)
+        *   `ArduinoJson`
+*   **Discord Account**: And permission to create a Discord Application for the bot.
+*   **Spotify Account**: To play music and enable Discord Rich Presence.
 
----
-
-## 🎧 Prasyarat — Hubungkan Spotify ke Discord
-
-Bot ini bekerja dengan membaca **Discord Presence** (status aktivitas) yang otomatis muncul saat kamu main Spotify. Supaya ini bisa terbaca, kamu harus pastikan Spotify sudah terhubung ke Discord dulu.
-
-### Langkah-langkah:
-
-1. Buka **Discord** → klik ikon ⚙️ **User Settings** (pojok kiri bawah)
-2. Di sidebar kiri, pilih **Connections**
-3. Klik ikon **Spotify** (logo hijau)
-4. Login ke akun Spotify kamu di browser yang muncul → klik **Agree**
-5. Setelah berhasil, Spotify akan muncul di daftar koneksi
-
-### Aktifkan "Display on profile":
-
-Setelah Spotify terhubung, pastikan toggle **"Display Spotify as your status"** dalam keadaan **ON** (hijau).
-
-> ⚠️ Kalau toggle ini mati, Discord tidak akan broadcast aktivitas Spotify kamu, dan bot **tidak akan bisa membaca lagu yang sedang diputar**.
-
-### Cek status Discord kamu:
-
-Pastikan status kamu **bukan** Invisible. Bot hanya bisa membaca presence kalau status kamu Online, Idle, atau Do Not Disturb.
-
-```
-✅ Online       → bisa terbaca
-✅ Idle         → bisa terbaca
-✅ Do Not Disturb → bisa terbaca
-❌ Invisible    → TIDAK terbaca
-```
-
----
-
-## 🖥️ Bagian 1 — Setup Bot Python (VPS / PC)
-
-### Requirement
-
-| Software | Versi minimal |
-|----------|--------------|
-| Python | 3.9+ |
-| pip | terbaru |
-
-### Install Dependencies
-
-Pastikan Python sudah terinstall dulu. Cek dengan:
+### Python Dependencies (for `bot.py`)
+Install using pip
 ```bash
-python --version
-# atau
-python3 --version
+pip install -r requirements.txt
 ```
+(Note: `dataclasses` is usually built-in for Python 3.7+ but listed in `bot.py` snippet for clarity.)
 
-Kalau belum ada, download di [python.org](https://www.python.org/downloads/) → centang **"Add Python to PATH"** saat install (Windows).
+##  Installation & Setup
 
-Setelah Python siap, install library yang dibutuhkan:
+Follow these steps to get your Spotify OLED display up and running.
 
+### 1. Clone the Repository
+Start by cloning the project repository to your local machine:
 ```bash
-pip install discord.py aiohttp
+git clone https://github.com/A-flp/Spotify-ESP32.git
+cd Spotify-ESP32
 ```
 
-atau kalau pakai `pip3`:
-```bash
-pip3 install discord.py aiohttp
-```
+### 2. Discord Bot Setup (`bot.py`)
 
-Verifikasi berhasil terinstall:
-```bash
-pip show discord.py
-pip show aiohttp
-```
+The `bot.py` script acts as an HTTP server that fetches Spotify Rich Presence data from Discord and serves it to the ESP32.
 
-> **Catatan:** `discord.py` yang dibutuhkan adalah versi **2.x** (bukan yang lama). Kalau sebelumnya pernah install versi lama, uninstall dulu:
-> ```bash
-> pip uninstall discord.py
-> pip install "discord.py>=2.0"
-> ```
+1.  **Create a Discord Application and Bot**:
+    *   Go to the [Discord Developer Portal](https://discord.com/developers/applications).
+    *   Click "New Application", give it a name (e.g., "Spotify OLED Bot").
+    *   Navigate to the "Bot" tab in the left sidebar and click "Add Bot". Confirm.
+    *   **Copy the Bot Token**. This will be used in your `.env` file.
+    *   Under "Privileged Gateway Intents", enable `MESSAGE CONTENT INTENT`.
+    *   **Invite the bot to your server**: Go to "OAuth2" -> "URL Generator". Select `bot` scope and `Read Messages/View Channels` permission (you might need `Send Messages` for feedback). Copy the generated URL and paste it into your browser to invite the bot to your desired Discord server.
 
-### Konfigurasi di `bot.py`
+2.  **Configure Environment Variables**:
+    Create a file named `.env` in the root directory (`Spotify-ESP32/`) with the following content:
+    ```
+    DISCORD_TOKEN=YOUR_BOT_TOKEN_HERE
+    BOT_CHANNEL_ID=YOUR_DISCORD_CHANNEL_ID_HERE
+    # The ID of the Discord channel where the bot will listen for commands or report status.
+    # Replace with the actual ID of a channel in your server (right-click channel -> Copy ID).
+    ```
+    *Replace `YOUR_BOT_TOKEN_HERE` with the token copied from Discord Developer Portal.*
+    *Replace `YOUR_DISCORD_CHANNEL_ID_HERE` with the ID of a channel in your Discord server where your bot can interact.*
 
-Buka `bot.py`, edit bagian ini:
+3.  **Install Python Dependencies**:
+    Navigate to the project root and install the required Python libraries:
+    ```bash
+    pip install -r requirements.txt # (If a requirements.txt file exists)
+    # Otherwise, use:
+    # pip install discord.py aiohttp python-dotenv
+    ```
 
-```python
-BOT_TOKEN = "isi_token_bot_kamu_di_sini"
-USER_ID   = 123456789012345678   # Discord User ID kamu (bukan username)
-PORT      = 3000                  # Port HTTP server
-LYRIC_LEAD = 2.4                  # Detik offset lirik (sesuaikan selera)
-```
+4.  **Run the Discord Bot**:
+    Execute the `bot.py` script:
+    ```bash
+    python bot.py
+    ```
+    The bot will start a web server, typically on port `8080`. Note the IP address or hostname where your bot is running, as you'll need it for the ESP32. If running on a local machine, find its local IP address (e.g., `ipconfig` on Windows, `ifconfig` or `ip a` on Linux/macOS). If running on a VPS, use its public IP or domain.
 
-#### Cara dapat `BOT_TOKEN`:
-1. Buka [Discord Developer Portal](https://discord.com/developers/applications)
-2. Klik **New Application** → beri nama
-3. Masuk ke menu **Bot** → klik **Reset Token** → copy tokennya
-4. Di menu **Privileged Gateway Intents**, aktifkan:
-   - ✅ **Presence Intent**
-   - ✅ **Server Members Intent**
-5. Masuk menu **OAuth2 → URL Generator**, centang `bot`, lalu centang permission `Read Messages/View Channels`
-6. Copy URL yang dihasilkan → buka di browser → invite bot ke server Discord kamu
+### 3. ESP32 Firmware Setup (`esp32.ino`)
 
-#### Cara dapat `USER_ID`:
-1. Buka Discord → Settings → Advanced → aktifkan **Developer Mode**
-2. Klik kanan nama kamu → **Copy User ID**
+The `esp32.ino` sketch connects to your Wi-Fi network, then periodically requests Spotify track information from the running Discord bot's HTTP server.
 
-### Jalankan Bot
+1.  **Open in Arduino IDE**:
+    *   Open `esp32/esp32.ino` in the Arduino IDE.
 
-```bash
-python bot.py
-```
+2.  **Install ESP32 Board Package**:
+    *   Go to `File > Preferences`. In "Additional Board Manager URLs", add `https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json`.
+    *   Go to `Tools > Board > Boards Manager...`. Search for "ESP32" and install the "esp32 by Espressif Systems" package.
 
-Output yang benar:
-```
-[server] http://0.0.0.0:3000/now-playing
-[bot] logged in as NamaBotKamu#1234
-[bot] watching user ID: 713597471414026240
-```
+3.  **Install Libraries**:
+    *   Go to `Sketch > Include Library > Manage Libraries...`.
+    *   Search and install:
+        *   `Adafruit GFX Library`
+        *   `Adafruit SH1106 Library` (or `U8g2` for a more universal display library, if you prefer)
+        *   `ArduinoJson`
+        *   `WiFiManager` (if used in `esp32.ino` for easy Wi-Fi configuration)
 
-### Test Manual
+4.  **Configure Wi-Fi and Bot Server Details**:
+    Modify the following lines in `esp32.ino` to match your network and bot setup. Look for variables related to WiFi SSID, password, and the bot server address:
+    ```cpp
+    // Wi-Fi Credentials
+    const char* ssid = "YOUR_WIFI_SSID";
+    const char* password = "YOUR_WIFI_PASSWORD";
 
-Buka browser atau curl ke:
-```
-http://localhost:3000/now-playing
-```
+    // Discord Bot Server Details
+    const char* botServerHost = "YOUR_BOT_SERVER_IP"; // e.g., "192.168.1.100" or "your-vps-domain.com"
+    const int botServerPort = 8080; // Default port for the Python bot (check bot.py if unsure)
 
-Contoh response saat musik diputar:
+    // OLED Display I2C Pins (adjust if necessary)
+    #define OLED_SDA_PIN 21
+    #define OLED_SCL_PIN 22
+    #define OLED_RST_PIN -1 // Set to -1 if your OLED has no RST pin or it's tied to VCC
+    ```
+    Adjust the OLED display pins (`OLED_SDA_PIN`, `OLED_SCL_PIN`, `OLED_RST_PIN`) according to your specific hardware connections.
+
+5.  **Connect ESP32 & Upload Sketch**:
+    *   Connect your ESP32 board to your computer via USB.
+    *   Select the correct board (`Tools > Board > ESP32 Dev Module` or your specific ESP32 board) and COM port (`Tools > Port`).
+    *   Click the "Upload" button (right arrow icon) in the Arduino IDE to flash the firmware to your ESP32.
+
+### 4. Hardware Connections
+Connect your SH1106 OLED display to the ESP32 via I2C. A typical connection scheme is:
+*   **OLED VCC** to **ESP32 3.3V**
+*   **OLED GND** to **ESP32 GND**
+*   **OLED SCL** to **ESP32 GPIO 22** (default I2C SCL for ESP32)
+*   **OLED SDA** to **ESP32 GPIO 21** (default I2C SDA for ESP32)
+*   **OLED RST** (if present and used) to an available ESP32 GPIO pin (e.g., GPIO 16), defined as `OLED_RST_PIN` in `esp32.ino`. If your display doesn't have a RST pin or it's hardwired, set `OLED_RST_PIN` to `-1`.
+
+##  How It Works & Usage
+
+### Overall System Flow
+1.  **Spotify Rich Presence**: When you play music on Spotify, it updates your Discord status via Rich Presence, displaying the song information.
+2.  **Discord Bot**: The `bot.py` script, running on your PC or a VPS, connects to Discord and monitors your (or a specified user's) Rich Presence for Spotify activity.
+3.  **HTTP Server**: The bot simultaneously hosts a simple HTTP server (e.g., at `http://YOUR_BOT_SERVER_IP:8080/spotify-data`). This server processes the Rich Presence data into a clean JSON format.
+4.  **ESP32 Request**: The `esp32.ino` firmware, after connecting to your Wi-Fi, periodically makes HTTP requests to the bot's server endpoint.
+5.  **Data Display**: The ESP32 receives the JSON data containing track name, artist, lyrics, progress, etc., parses it, and renders it dynamically on the OLED display.
+
+### Using the System
+Once both the Discord Bot and ESP32 are successfully set up and running:
+
+1.  **Play music on Spotify**.
+2.  Ensure your Discord application is open and your status is visible, displaying Spotify Rich Presence.
+3.  The ESP32 will automatically connect to your Wi-Fi and begin fetching data. The OLED display will then show the current track, artist, progress bar, synced lyrics, and animations.
+
+### Bot HTTP Endpoint (for ESP32 consumption)
+The bot exposes an HTTP endpoint that the ESP32 consumes. The exact endpoint path is typically defined within `bot.py` (e.g., `/spotify-data`). It returns a JSON object similar to this:
+
 ```json
 {
-  "title": "Blinding Lights",
-  "artist": "The Weeknd",
-  "playing": true,
-  "position_ms": 45000,
-  "duration_ms": 200000,
-  "lyric_prev": "I've been tryna call",
-  "lyric_curr": "I need your love",
-  "lyric_next": "I've been on my own for long enough"
+  "title": "Song Title Example",
+  "artist": "Artist Name",
+  "progress_ms": 120000,
+  "duration_ms": 240000,
+  "album_cover_url": "https://example.com/cover.jpg",
+  "lyrics": [
+    {"timestamp": 0, "text": "Lyric line one starts here"},
+    {"timestamp": 5000, "text": "And the second line follows soon"},
+    {"timestamp": 10000, "text": "Timing is everything with lyrics!"}
+  ],
+  "is_playing": true,
+  "timestamp": 1678886400000
 }
 ```
+The ESP32 firmware parses this JSON to update the OLED display with all the necessary information.
 
----
+## ⚙️ Configuration Options
 
-## ☁️ Deploy ke VPS (Opsional tapi Direkomendasikan)
- 
-Kalau mau bot jalan 24/7 tanpa PC nyala, gunakan VPS (Contoh: DigitalOcean, Vultr, Contabo, dll.).
- 
-### 0. Cara Dapat IP Publik VPS
- 
-IP publik VPS kamu bisa dilihat dari beberapa cara:
- 
-**Cara 1 — Dari dashboard provider VPS**
-Setelah beli VPS, IP publik langsung tertera di halaman dashboard/panel kontrol provider kamu (DigitalOcean, Vultr, Contabo, dll.). Biasanya ditampilkan sebagai *"IP Address"* atau *"IPv4"*.
- 
-**Cara 2 — Dari dalam VPS lewat SSH**
-Setelah login ke VPS via SSH, jalankan salah satu perintah ini:
- 
-```bash
-# Cara paling simpel
-curl ifconfig.me
- 
-# Alternatif
-curl ipinfo.io/ip
- 
-# Atau lihat dari network interface
-ip a
-# Cari bagian eth0 atau ens3, lihat baris "inet x.x.x.x"
-```
- 
-Contoh output `curl ifconfig.me`:
-```
-103.28.xx.xx
-```
- 
-IP itulah yang dipakai di `SERVER_URL` pada `esp32.ino`:
-```cpp
-const char* SERVER_URL = "http://103.28.xx.xx:3000/now-playing";
-```
- 
-> 💡 IP publik VPS bersifat **tetap (static)** — tidak berubah selama kamu tidak rebuild/hapus VPS. Berbeda dengan IP rumah yang bisa berubah sewaktu-waktu.
- 
----
+### `bot.py` (via `.env` file)
+*   `DISCORD_TOKEN`: Your Discord bot's authentication token. **(Required)**
+*   `BOT_CHANNEL_ID`: The ID of the Discord channel where your bot will operate and potentially send status messages. **(Required)**
+*   `WEB_SERVER_HOST`: (Optional, if specified in `bot.py`) The host address for the web server. Default is often `0.0.0.0` (all interfaces).
+*   `WEB_SERVER_PORT`: (Optional, if specified in `bot.py`) The port on which the HTTP server listens. Default is often `8080`.
 
-### 1. Upload file ke VPS
+### `esp32.ino`
+*   `ssid`: Your Wi-Fi network's SSID.
+*   `password`: Your Wi-Fi network's password.
+*   `botServerHost`: The IP address or hostname of the machine running your `bot.py` script. This must be accessible by the ESP32 (e.g., local network IP or public VPS IP).
+*   `botServerPort`: The port of the HTTP server run by `bot.py`.
+*   **OLED Pin Definitions**: (`OLED_SDA_PIN`, `OLED_SCL_PIN`, `OLED_RST_PIN` or similar) Adjust these based on your ESP32's I2C connections and whether you use a reset pin for your OLED.
+*   **Display Type**: If using an SSD1306 instead of SH1106, you will need to adjust the display initialization code (e.g., `Adafruit_SH1106` vs `Adafruit_SSD1306`) and potentially the display resolution if it differs.
 
-```bash
-scp bot.py user@ip-vps-kamu:/home/user/spotify-oled/
-```
+🙏 Acknowledgments
 
-### 2. Install Python & dependencies di VPS
-
-```bash
-sudo apt update
-sudo apt install python3 python3-pip -y
-pip3 install discord.py aiohttp
-```
-
-### 3. Jalankan pakai `screen` (biar tetap jalan walau SSH ditutup)
-
-```bash
-screen -S spotify-bot
-python3 bot.py
-# Tekan Ctrl+A lalu D untuk detach
-```
-
-Untuk kembali ke sesi:
-```bash
-screen -r spotify-bot
-```
-
-### 4. Buka port firewall di VPS
-
-```bash
-sudo ufw allow 3000
-```
-
-> ⚠️ **Keamanan:** Port 3000 akan terbuka ke publik. Kalau ingin lebih aman, batasi hanya IP tertentu yang bisa akses, atau gunakan VPN.
-
----
-
-## 🔌 Bagian 2 — Setup ESP32
-
-### Hardware yang Dibutuhkan
-
-| Komponen | Keterangan |
-|----------|-----------|
-| ESP32 (board apapun) | NodeMCU ESP32, WEMOS, dll |
-| OLED SH1106 128×64 | Koneksi I2C |
-| Kabel jumper | 4 kabel |
-
-### Wiring I2C
-
-```
-ESP32        OLED SH1106
-GPIO 21  ──► SDA
-GPIO 22  ──► SCL
-3.3V     ──► VCC
-GND      ──► GND
-```
-
-### Library Arduino yang Diperlukan
-
-Buka Arduino IDE, lalu buka **Library Manager** lewat:
-- Menu **Sketch → Include Library → Manage Libraries...**
-- atau tekan `Ctrl+Shift+I`
-
-Cari dan install satu per satu:
-
-**1. U8g2**
-- Ketik di pencarian: `U8g2`
-- Pilih yang by **oliver** (bukan U8x8)
-- Klik **Install** → kalau muncul popup *"Install dependencies?"* klik **Install All**
-
-**2. ArduinoJson**
-- Ketik di pencarian: `ArduinoJson`
-- Pilih yang by **Benoit Blanchon**
-- Klik **Install**
-
-**3. HTTPClient & WiFi**
-- Kedua library ini **sudah bawaan** saat board ESP32 terinstall, tidak perlu install manual
-- Kalau muncul error `HTTPClient.h not found`, berarti board ESP32 belum terinstall (lihat langkah di bawah)
-
-### Install ESP32 Board di Arduino IDE
-
-1. Buka **File → Preferences**
-2. Di kolom *Additional Board Manager URLs*, tambahkan:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-3. Buka **Tools → Board → Board Manager** → cari `esp32` → Install
-
-### Konfigurasi di `esp32.ino`
-
-```cpp
-const char* WIFI_SSID  = "NamaWiFiKamu";
-const char* WIFI_PASS  = "PasswordWiFiKamu";
-const char* SERVER_URL = "http://192.168.x.x:3000/now-playing";
-//                                  ↑ IP VPS atau IP PC yang jalankan bot.py
-```
-
-> Kalau bot jalan di PC lokal (jaringan sama): pakai IP lokal PC kamu.
-> Kalau bot jalan di VPS: pakai IP publik VPS kamu.
-
-### Upload ke ESP32
-
-1. Pilih board: **Tools → Board → ESP32 Dev Module**
-2. Pilih port COM yang benar
-3. Klik **Upload**
-
----
-
-## 📺 Tampilan Layar
-
-### Idle (tidak ada musik)
-Menampilkan animasi mata dengan berbagai ekspresi acak (kedip, wink, senang, ngantuk, kaget, dll.) dan teks `SPOTIFY IS SLEEPING`.
-
-### Now Playing
-- Header: logo Spotify + teks "now playing" + animasi EQ bar
-- Judul lagu (scroll otomatis kalau terlalu panjang)
-- Nama artist
-- Progress bar + timer posisi/durasi
-
-### Lyrics Mode
-Aktif otomatis kalau lagu punya lirik tersinkronisasi. Menampilkan:
-- Baris lirik **sekarang** (highlight/invert)
-- Baris lirik **berikutnya** (kecil, dengan prefix `>>`)
-- Progress bar di bawah
-
----
-
-## 🔧 Troubleshooting
-
-### Bot tidak detect lagu Spotify
-- Pastikan **Presence Intent** sudah diaktifkan di Developer Portal
-- Pastikan akun Discord kamu ada di server yang sama dengan bot
-- Pastikan status Discord kamu **tidak** di-set ke invisible
-- Pastikan aplikasi Spotify terhubung ke Discord (Settings Discord → Connections)
-
-### ESP32 tidak bisa konek ke server
-- Cek IP address di `SERVER_URL` sudah benar
-- Pastikan port 3000 tidak diblokir firewall
-- Test dulu dari PC: `curl http://IP_KAMU:3000/now-playing`
-
-### Lirik tidak muncul / tidak sinkron
-- Tidak semua lagu ada di database lrclib.net
-- Coba sesuaikan nilai `LYRIC_LEAD` di `bot.py` (default `2.4` detik)
-- Cek endpoint debug: `http://IP_KAMU:3000/debug`
-
-### OLED tidak menyala
-- Cek wiring SDA/SCL
-- Cek alamat I2C OLED kamu (default SH1106 biasanya `0x3C`)
-- Kalau pakai pin I2C berbeda, ubah di `Wire.begin(SDA_PIN, SCL_PIN)`
-
----
-
-## 📡 API Endpoint
-
-### `GET /now-playing`
-Response saat musik diputar:
-```json
-{
-  "title": "string",
-  "artist": "string",
-  "playing": true,
-  "position_ms": 12345,
-  "duration_ms": 200000,
-  "lyric_prev": "string",
-  "lyric_curr": "string",
-  "lyric_next": "string"
-}
-```
-
-Response saat tidak ada musik:
-```json
-{ "playing": false }
-```
-
-### `GET /debug`
-Menampilkan state internal bot dan sample lirik yang tersimpan di cache.
-
----
-
-## 📦 Dependencies Lengkap
-
-### Python (`bot.py`)
-```
-discord.py>=2.0
-aiohttp
-```
-(Semua lainnya — `asyncio`, `json`, `re`, `urllib` — sudah bawaan Python)
-
-### Arduino (`esp32.ino`)
-```
-U8g2
-ArduinoJson
-WiFi (bawaan ESP32)
-HTTPClient (bawaan ESP32)
-```
-
----
-
-## Credit
-
-Created by EkiZR  
-Instagram: https://www.instagram.com/ekizr_/?hl=id
+*   Original concept and base for the Discord bot by [EkiZR](https://github.com/EkiZR).
+*   Please refer to the original repository by [EkiZR](https://github.com/EkiZR/Spotify-ESP32) for more information.
+*   Inspired by the vibrant open-source community's creativity with ESP32 microcontrollers and OLED displays.
