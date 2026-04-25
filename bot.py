@@ -21,13 +21,62 @@ load_dotenv()
 # ════════════════════════════════════════════════════════
 #  CONFIGURATION (Modified to use os.load_dotenv for better error handling)
 # ════════════════════════════════════════════════════════
-BOT_TOKEN   = os.load_dotenv("BOT_TOKEN")
-USER_ID     = os.load_dotenv("USER_ID")
-PORT        = int(os.load_dotenv("PORT"))
-LYRIC_LEAD  = float(os.load_dotenv("LYRIC_LEAD"))
+BOT_TOKEN   = os.getenv("BOT_TOKEN")
+USER_ID     = os.getenv("USER_ID")
+PORT        = int(os.getenv("PORT"))
+LYRIC_LEAD  = float(os.getenv("LYRIC_LEAD"))
 
 WATCHDOG_INTERVAL = 2
 CACHE_LIMIT = 100
+# ════════════════════════════════════════════════════════
+# LOGGING
+# ════════════════════════════════════════════════════════
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)s] %(asctime)s %(message)s"
+)
+
+log = logging.getLogger("spotify-server")
+
+# ════════════════════════════════════════════════════════
+# GLOBALS
+# ════════════════════════════════════════════════════════
+http_session: ClientSession | None = None
+tracked_member = None
+
+LRC_REGEX = re.compile(r'\[(\d+):(\d+\.\d+)\](.*)')
+
+# ════════════════════════════════════════════════════════
+# DATA CLASSES
+# ════════════════════════════════════════════════════════
+@dataclass(slots=True)
+class LyricLine:
+    time: float
+    text: str
+
+
+@dataclass(slots=True)
+class LyricsState:
+    key: str = ""
+    lines: List[LyricLine] = field(default_factory=list)
+    duration: float = 0
+
+
+@dataclass(slots=True)
+class TrackState:
+    playing: bool = False
+    title: str = ""
+    artist: str = ""
+    album: str = ""
+    start_epoch: float = 0
+    end_epoch: float = 0
+    duration_ms: int = 0
+
+
+current = TrackState()
+lyrics = LyricsState()
+
+lyrics_cache: Dict[str, LyricsState] = {}
 
 # ════════════════════════════════════════════════════════
 #  STATE
