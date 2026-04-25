@@ -11,7 +11,6 @@ import json
 import re
 import logging
 import urllib.parse
-import urllib.request
 
 from aiohttp import web, ClientSession
 from dataclasses import dataclass, field
