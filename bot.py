@@ -23,7 +23,7 @@ load_dotenv()
 #  CONFIGURATION (Modified to use os.load_dotenv for better error handling)
 # ════════════════════════════════════════════════════════
 BOT_TOKEN   = os.getenv("BOT_TOKEN")
-USER_ID     = os.getenv("USER_ID")
+USER_ID     = int(os.getenv("USER_ID"))
 PORT        = int(os.getenv("PORT"))
 LYRIC_LEAD  = float(os.getenv("LYRIC_LEAD"))
 
@@ -80,197 +80,312 @@ lyrics = LyricsState()
 lyrics_cache: Dict[str, LyricsState] = {}
 
 # ════════════════════════════════════════════════════════
-#  STATE
+# LYRICS FETCH (ASYNC)
 # ════════════════════════════════════════════════════════
-current = {}
-lyrics  = {
-    "key":      "",
-    "lines":    [],
-    "duration": 0,
-}
+async def fetch_lyrics(artist: str, title: str) -> LyricsState:
 
-# ════════════════════════════════════════════════════════
-#  Fetch Lyrics from lrclib.net API
-# ════════════════════════════════════════════════════════
-def fetch_lyrics(artist, title):
+    key = f"{artist}|{title}"
+
+    cached = lyrics_cache.get(key)
+    if cached:
+        return cached
+
     url = (
         "https://lrclib.net/api/get"
         f"?artist_name={urllib.parse.quote(artist)}"
         f"&track_name={urllib.parse.quote(title)}"
     )
 
-    for attempt in range(3):  # 🔁 retry 3x
+    for _ in range(3):
+
         try:
-            req = urllib.request.Request(
-                url, headers={"User-Agent": "ESP32-Spotify/1.0"}
-            )
 
-            with urllib.request.urlopen(req, timeout=10) as res:
-                data = json.loads(res.read())
+            async with http_session.get(url) as res:
 
-            synced   = data.get("syncedLyrics", "") or ""
-            plain    = data.get("plainLyrics",  "") or ""
+                data = await res.json()
+
+            synced = data.get("syncedLyrics") or ""
+            plain = data.get("plainLyrics") or ""
             duration = data.get("duration", 0)
-            lines    = []
+
+            lines = []
 
             if synced:
+
                 for line in synced.split("\n"):
-                    m = re.match(r'\[(\d+):(\d+\.\d+)\](.*)', line)
+
+                    m = LRC_REGEX.match(line)
+
                     if m:
                         secs = int(m.group(1)) * 60 + float(m.group(2))
                         text = m.group(3).strip()
+
                         if text:
-                            lines.append({"time": secs, "text": text})
+                            lines.append(LyricLine(secs, text))
 
             elif plain:
-                lines = [
-                    {"time": 0, "text": l.strip()}
-                    for l in plain.split("\n") if l.strip()
-                ]
 
-            print(f"[lrclib] success ({len(lines)} lines)")
-            return lines, duration
+                for line in plain.split("\n"):
+
+                    line = line.strip()
+
+                    if line:
+                        lines.append(LyricLine(0, line))
+
+            state = LyricsState(key, lines, duration)
+
+            if len(lyrics_cache) > CACHE_LIMIT:
+                lyrics_cache.pop(next(iter(lyrics_cache)))
+
+            lyrics_cache[key] = state
+
+            log.info(f"lyrics loaded {len(lines)} lines")
+
+            return state
 
         except Exception as e:
-            print(f"[lrclib] retry {attempt+1}/3 error: {e}")
-            time.sleep(1)
+            log.warning(f"lrclib retry: {e}")
+            await asyncio.sleep(1)
 
-    print("[lrclib] failed after 3 retries")
-    return [], 0
+    return LyricsState()
 
 # ════════════════════════════════════════════════════════
-#  Fetch lyrics according to position
+# LYRIC LOOKUP (FAST BINARY SEARCH)
 # ════════════════════════════════════════════════════════
-def get_lyric(progress_secs):
-    lines    = lyrics["lines"]
-    duration = lyrics["duration"]
+def get_lyric(progress_secs: float):
+
+    lines = lyrics.lines
+    duration = lyrics.duration
 
     if not lines:
-        return {"prev": "", "curr": "", "next": ""}
+        return "", "", ""
 
-    if lines[0]["time"] == 0:
+    if lines[0].time == 0:
+
         total = duration or 200
-        i = min(int((progress_secs / total) * len(lines)), len(lines) - 1)
-        return {
-            "prev": lines[i-1]["text"] if i > 0 else "",
-            "curr": lines[i]["text"],
-            "next": lines[i+1]["text"] if i+1 < len(lines) else "",
-        }
 
-    idx = 0
-    for i, line in enumerate(lines):
-        if line["time"] <= progress_secs:
-            idx = i
+        idx = min(
+            int((progress_secs / total) * len(lines)),
+            len(lines) - 1
+        )
+
+        prev = lines[idx - 1].text if idx > 0 else ""
+        curr = lines[idx].text
+        nxt = lines[idx + 1].text if idx + 1 < len(lines) else ""
+
+        return prev, curr, nxt
+
+    lo = 0
+    hi = len(lines) - 1
+
+    while lo <= hi:
+
+        mid = (lo + hi) // 2
+
+        if lines[mid].time <= progress_secs:
+            lo = mid + 1
         else:
-            break
+            hi = mid - 1
 
-    return {
-        "prev": lines[idx-1]["text"] if idx > 0 else "",
-        "curr": lines[idx]["text"],
-        "next": lines[idx+1]["text"] if idx+1 < len(lines) else "",
-    }
+    idx = max(0, lo - 1)
+
+    prev = lines[idx - 1].text if idx > 0 else ""
+    curr = lines[idx].text
+    nxt = lines[idx + 1].text if idx + 1 < len(lines) else ""
+
+    return prev, curr, nxt
+
 
 # ════════════════════════════════════════════════════════
-#  DISCORD BOT
+# DISCORD CLIENT
 # ════════════════════════════════════════════════════════
 intents = discord.Intents.default()
 intents.presences = True
-intents.members   = True
+intents.members = True
 
-bot = discord.Client(intents=intents)
 
+class SpotifyClient(discord.Client):
+
+    async def setup_hook(self):
+
+        global http_session
+
+        http_session = ClientSession()
+
+        self.loop.create_task(spotify_watchdog())
+
+        log.info("watchdog started")
+
+
+bot = SpotifyClient(intents=intents)
+
+# ════════════════════════════════════════════════════════
+# READY
+# ════════════════════════════════════════════════════════
 @bot.event
 async def on_ready():
-    print(f"[bot] logged in as {bot.user}")
-    print(f"[bot] watching user ID: {USER_ID}")
 
+    global tracked_member
+
+    log.info(f"logged in as {bot.user}")
+
+    for guild in bot.guilds:
+
+        member = guild.get_member(USER_ID)
+
+        if member:
+            tracked_member = member
+            break
+
+    log.info("member cached")
+
+
+# ════════════════════════════════════════════════════════
+# PRESENCE UPDATE
+# ════════════════════════════════════════════════════════
 @bot.event
 async def on_presence_update(before, after):
+
     if after.id != USER_ID:
         return
 
+    await process_spotify(after)
+
+
+async def process_spotify(member):
+
     spotify = next(
-        (a for a in after.activities if isinstance(a, discord.Spotify)),
+        (a for a in member.activities if isinstance(a, discord.Spotify)),
         None
     )
 
     if not spotify:
-        current.update({"playing": False})
-        print("[bot] spotify stopped")
+
+        current.playing = False
         return
 
     artist = ", ".join(spotify.artists)
-    title  = spotify.title
-    key    = f"{artist}|{title}"
+    title = spotify.title
 
-    if lyrics["key"] != key:
-        print(f"[bot] new track: {artist} - {title}")
-        lines, duration = await asyncio.get_event_loop().run_in_executor(
-            None, fetch_lyrics, artist, title
-        )
-        lyrics.update({"key": key, "lines": lines, "duration": duration})
-        print(f"[lrclib] final: {len(lines)} lines, {duration}s")
+    key = f"{artist}|{title}"
 
-    current.update({
-        "playing":     True,
-        "title":       title,
-        "artist":      artist,
-        "album":       spotify.album,
-        "start_epoch": spotify.start.timestamp(),
-        "end_epoch":   spotify.end.timestamp(),
-        "duration_ms": int((spotify.end - spotify.start).total_seconds() * 1000),
-        "track_id":    spotify.track_id,
-    })
+    if lyrics.key != key:
+
+        state = await fetch_lyrics(artist, title)
+
+        lyrics.key = state.key
+        lyrics.lines = state.lines
+        lyrics.duration = state.duration
+
+    current.playing = True
+    current.title = title
+    current.artist = artist
+    current.album = spotify.album
+
+    current.start_epoch = spotify.start.timestamp()
+    current.end_epoch = spotify.end.timestamp()
+
+    current.duration_ms = int(
+        (spotify.end - spotify.start).total_seconds() * 1000
+    )
 
 # ════════════════════════════════════════════════════════
-#  HTTP SERVER
+# WATCHDOG
+# ════════════════════════════════════════════════════════
+async def spotify_watchdog():
+
+    await bot.wait_until_ready()
+
+    while True:
+
+        try:
+
+            if tracked_member:
+
+                await process_spotify(tracked_member)
+
+        except Exception as e:
+
+            log.error(f"watchdog error {e}")
+
+        await asyncio.sleep(WATCHDOG_INTERVAL)
+
+# ════════════════════════════════════════════════════════
+# HTTP API
 # ════════════════════════════════════════════════════════
 async def handle_now_playing(request):
-    if not current.get("playing"):
+
+    if not current.playing:
+
         return web.json_response({"playing": False})
 
-    now      = time.time()
-    pos_ms   = int((now - current["start_epoch"]) * 1000)
+    now = time.time()
+
+    pos_ms = int((now - current.start_epoch) * 1000)
+
     pos_secs = pos_ms / 1000 + LYRIC_LEAD
 
-    lyric = get_lyric(pos_secs)
+    prev, curr, nxt = get_lyric(pos_secs)
 
     return web.json_response({
-        "title":       current["title"],
-        "artist":      current["artist"],
-        "playing":     True,
+        "playing": True,
+        "title": current.title,
+        "artist": current.artist,
         "position_ms": pos_ms,
-        "duration_ms": current["duration_ms"],
-        "lyric_prev":  lyric["prev"],
-        "lyric_curr":  lyric["curr"],
-        "lyric_next":  lyric["next"],
+        "duration_ms": current.duration_ms,
+        "lyric_prev": prev,
+        "lyric_curr": curr,
+        "lyric_next": nxt
     })
+
 
 async def handle_debug(request):
+
     return web.json_response({
-        "current": current,
-        "lyrics": {
-            "key":      lyrics["key"],
-            "total":    len(lyrics["lines"]),
-            "duration": lyrics["duration"],
-            "sample":   lyrics["lines"][:5],
-        }
+        "current": vars(current),
+        "lyrics_lines": len(lyrics.lines),
+        "cache": len(lyrics_cache)
+    })
+
+
+async def handle_health(request):
+
+    return web.json_response({
+        "status": "ok",
+        "time": time.time()
     })
 
 # ════════════════════════════════════════════════════════
-#  MAIN
+# SERVER
 # ════════════════════════════════════════════════════════
-async def main():
+async def start_server():
+
     app = web.Application()
+
     app.router.add_get("/now-playing", handle_now_playing)
     app.router.add_get("/debug", handle_debug)
+    app.router.add_get("/health", handle_health)
 
     runner = web.AppRunner(app)
-    await runner.setup()
-    await web.TCPSite(runner, "0.0.0.0", PORT).start()
 
-    print(f"[server] http://0.0.0.0:{PORT}/now-playing")
+    await runner.setup()
+
+    site = web.TCPSite(runner, "0.0.0.0", PORT)
+
+    await site.start()
+
+    log.info(f"http server running :{PORT}")
+
+# ════════════════════════════════════════════════════════
+# MAIN
+# ════════════════════════════════════════════════════════
+async def main():
+
+    await start_server()
 
     await bot.start(BOT_TOKEN)
 
-asyncio.run(main())
+
+if __name__ == "__main__":
+
+    asyncio.run(main())
