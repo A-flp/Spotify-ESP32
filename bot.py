@@ -1,3 +1,9 @@
+#════════════════════════════════════════════════════════
+# Spotify Lyrics Bot for ESP32 Credits to EkiZR. 
+# Forked by A-flp
+#════════════════════════════════════════════════════════
+import os
+from dotenv import load_dotenv
 import discord
 import asyncio
 import time
@@ -6,14 +12,17 @@ import re
 import urllib.request
 import urllib.parse
 from aiohttp import web
+import os
+
+load_dotenv()
 
 # ════════════════════════════════════════════════════════
-#  KONFIGURASI
+#  CONFIGURATION (Modified to use os.load_dotenv for better error handling)
 # ════════════════════════════════════════════════════════
-BOT_TOKEN   = ""
-USER_ID     = ""        # ganti dengan Discord user ID kamu
-PORT        = 3000
-LYRIC_LEAD  = 2.4
+BOT_TOKEN   = os.load_dotenv("BOT_TOKEN")
+USER_ID     = os.load_dotenv("USER_ID")
+PORT        = int(os.load_dotenv("PORT"))
+LYRIC_LEAD  = float(os.load_dotenv("LYRIC_LEAD"))
 
 # ════════════════════════════════════════════════════════
 #  STATE
@@ -26,7 +35,7 @@ lyrics  = {
 }
 
 # ════════════════════════════════════════════════════════
-#  FETCH LIRIK — RETRY VERSION
+#  Fetch Lyrics from lrclib.net API
 # ════════════════════════════════════════════════════════
 def fetch_lyrics(artist, title):
     url = (
@@ -75,7 +84,7 @@ def fetch_lyrics(artist, title):
     return [], 0
 
 # ════════════════════════════════════════════════════════
-#  AMBIL LIRIK SESUAI POSISI
+#  Fetch lyrics according to position
 # ════════════════════════════════════════════════════════
 def get_lyric(progress_secs):
     lines    = lyrics["lines"]
