@@ -22,10 +22,10 @@ load_dotenv()
 # ════════════════════════════════════════════════════════
 #  CONFIGURATION (Modified to use os.load_dotenv for better error handling)
 # ════════════════════════════════════════════════════════
-BOT_TOKEN   = os.getenv("BOT_TOKEN")
-USER_ID     = int(os.getenv("USER_ID"))
-PORT        = int(os.getenv("PORT"))
-LYRIC_LEAD  = float(os.getenv("LYRIC_LEAD"))
+BOT_TOKEN   = os.getenv("BOT_TOKEN") # Replace with your actual bot token or set in .env
+USER_ID     = int(os.getenv("USER_ID")) # Replace with the actual user ID you want to track or set in .env
+PORT        = int(os.getenv("PORT")) # Replace with your desired port or set in .env
+LYRIC_LEAD  = float(os.getenv("LYRIC_LEAD")) # Replace with your desired lyric lead time in seconds or set in .env
 
 WATCHDOG_INTERVAL = 2
 CACHE_LIMIT = 100
