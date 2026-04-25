@@ -178,7 +178,7 @@ The bot exposes an HTTP endpoint that the ESP32 consumes. The exact endpoint pat
 ```
 The ESP32 firmware parses this JSON to update the OLED display with all the necessary information.
 
-## ⚙️ Configuration Options
+##  Configuration Options
 
 ### `bot.py` (via `.env` file)
 *   `DISCORD_TOKEN`: Your Discord bot's authentication token. **(Required)**
@@ -194,7 +194,7 @@ The ESP32 firmware parses this JSON to update the OLED display with all the nece
 *   **OLED Pin Definitions**: (`OLED_SDA_PIN`, `OLED_SCL_PIN`, `OLED_RST_PIN` or similar) Adjust these based on your ESP32's I2C connections and whether you use a reset pin for your OLED.
 *   **Display Type**: If using an SSD1306 instead of SH1106, you will need to adjust the display initialization code (e.g., `Adafruit_SH1106` vs `Adafruit_SSD1306`) and potentially the display resolution if it differs.
 
-🙏 Acknowledgments
+ Acknowledgments
 
 *   Original concept and base for the Discord bot by [EkiZR](https://github.com/EkiZR).
 *   Please refer to the original repository by [EkiZR](https://github.com/EkiZR/Spotify-ESP32) for more information.
